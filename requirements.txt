@@ -1,0 +1,6 @@
+torch
+tensorboard
+gym
+gym[box2d]
+numpy
+matplotlib
