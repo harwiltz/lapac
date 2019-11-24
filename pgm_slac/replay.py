@@ -15,11 +15,10 @@ class SequenceReplayBuffer(object):
     def add(self, image_seq, action_seq, rew_seq, step_type):
         if self._weight < self._capacity:
             self._weight += 1
-        else:
-            self._image_buf[self._pointer] = image_seq
-            self._action_buf[self._pointer] = action_seq
-            self._rew_buf[self._pointer] = rew_seq
-            self._step_type_bug[self._pointer] = step_type
+        self._image_buf[self._pointer] = image_seq
+        self._action_buf[self._pointer] = action_seq
+        self._rew_buf[self._pointer] = rew_seq
+        self._step_type_buf[self._pointer] = list(map(lambda x: x.value, step_type))
         self._pointer = (self._pointer + 1) % self._capacity
 
     def sample(self, batch_size=1):

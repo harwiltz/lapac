@@ -1,4 +1,5 @@
 torch
+torchvision
 tensorboard
 gym
 gym[box2d]

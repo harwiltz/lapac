@@ -96,8 +96,11 @@ class PGMSlacAgent(object):
         images, actions, rewards, step_types = experience
         features = model_artifacts['features']
 
-        actor_loss = self.compute_actor_loss(features, actions, latent_posterior_samples)
-        critic_loss = self.compute_critic_loss(
+        actor_loss, actor_artifacts = self.compute_actor_loss(
+                features,
+                actions,
+                latent_posterior_samples)
+        critic_loss, critic_artifacts = self.compute_critic_loss(
                 features,
                 actions,
                 latent_posterior_samples,
@@ -126,6 +129,17 @@ class PGMSlacAgent(object):
         for params, target_params in zip(critic_params, target_critic_params):
             target_params.data.copy_(self._tau * params.data + (1-self._tau) * target_params.data)
 
+        return {
+            'model_loss': model_loss,
+            'actor_loss': actor_loss,
+            'actor_log_pi': actor_artifacts['log_pi'],
+            'critic_loss': critic_loss,
+            'ent_loss': ent_loss,
+            'ent': torch.exp(self._log_ent),
+            'images': model_artifacts['images'],
+            'posterior_images': model_artifacts['posterior_images'],
+        }
+
     def compute_actor_loss(self, features, actions, latent_posterior_samples):
         # actions shape: (Batch, Time, Action)
         policy_dist = self._actor_network(features, actions)
@@ -133,7 +147,7 @@ class PGMSlacAgent(object):
         q_values = torch.min(*self._critic_network(latent_posterior_samples[:, -1], next_actions))
         log_pis = policy_dist.log_prob(next_actions)
         loss = torch.exp(self._log_ent) * log_pis - q_values.squeeze()
-        return loss.mean()
+        return loss.mean(), {'log_pi': log_pis.mean()}
 
     def compute_critic_loss(self, features, actions, latent_posterior_samples, rewards):
         # Q(z_t, a_t)
@@ -152,7 +166,7 @@ class PGMSlacAgent(object):
             target_q_values = rewards[:, -1] + q_next
         q_loss_1 = F.mse_loss(estimated_q_values_1.squeeze(), target_q_values)
         q_loss_2 = F.mse_loss(estimated_q_values_2.squeeze(), target_q_values)
-        return q_loss_1 + q_loss_2
+        return q_loss_1 + q_loss_2, {}
 
     def compute_ent_loss(self, features, actions):
         with torch.no_grad():

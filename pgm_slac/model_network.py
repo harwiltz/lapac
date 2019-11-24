@@ -176,6 +176,7 @@ class ModelNetwork(nn.Module):
             'z2_posterior_samples': z2_samples,
             'images': images,
             'features': features,
+            'posterior_images': reconstruction_dist.mean,
         }
 
         return loss, artifacts
