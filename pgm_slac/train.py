@@ -19,13 +19,20 @@ def train(
         ent_lr=3e-4,
         model_lr=1e-4,
         initial_collect_time=100,
-        replay_buffer_capacity=10000):
+        replay_buffer_capacity=10000,
+        max_timesteps=1000,
+        steps_per_epoch=10000,
+        batch_size=32):
 
     env, obs_space, action_space = load_environment(env_universe, env_name)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    replay = SequenceReplayBuffer(replay_buffer_capacity)
+    replay = SequenceReplayBuffer(
+            replay_buffer_capacity,
+            sequence_length,
+            obs_space.shape,
+            action_space.shape)
 
     agent = PGMSlacAgent(
             obs_space,
@@ -38,21 +45,18 @@ def train(
             ent_lr=ent_lr,
             model_lr=model_lr)
 
-    obs = env.reset()
-
-    img_ctx = np.zeros([sequence_length] + list(obs_space.shape))
-    img_ctx = np.concatenate([img_ctx, np.expand_dims(obs, 0)])
-    action_ctx = np.zeros([sequence_length] + list(action_space.shape))
-    reward_ctx = np.zeros(sequence_length)
-    step_types = [StepType.first for _ in range(sequence_length)]
-
+    img = env.reset()
+    img_ctx, action_ctx, reward_ctx, step_types = agent.clear_context()
     step_type = StepType.first
 
-    for _ in range(initial_collect_time):
-        replay.add(img_ctx, action_ctx, reward_ctx, step_types)
-        action = agent.action((img_ctx, action_ctx, step_types))
-        img, rew, done, info = env.step(action.numpy())
+    for t in range(max_timesteps):
         img_ctx = np.concatenate([img_ctx[1:], np.expand_dims(img, 0)])
+        replay.add(img_ctx, action_ctx, reward_ctx, step_types)
+        if t < initial_collect_time:
+            action = env.action_space.sample()
+        else:
+            action = agent.action((img_ctx, action_ctx, step_types)).numpy()
+        img, rew, done, info = env.step(action)
         action_ctx = np.concatenate([action_ctx[1:], np.expand_dims(action, 0)])
         reward_ctx = np.concatenate([reward_ctx[1:], np.array([rew])])
         step_types = step_types[1:] + [step_type]
@@ -60,6 +64,11 @@ def train(
             step_type = StepType.mid
         else:
             step_type = StepType.first
+            img = env.reset()
+            img_ctx, action_ctx, reward_ctx, step_types = agent.clear_context()
+        if t > initial_collect_time:
+            experience = replay.sample(batch_size)
+            agent.train(experience)
 
 def load_environment(env_universe, env_name):
     if env_universe == 'custom':

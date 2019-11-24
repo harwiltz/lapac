@@ -1,10 +1,12 @@
 import copy
+import numpy as np
 import torch
 import torch.nn as nn
 
-from pgm_slac.model_network import ModelNetwork
 from pgm_slac.actor_network import ActorNetwork
 from pgm_slac.critic_network import CriticNetwork
+from pgm_slac.model_network import ModelNetwork
+from pgm_slac.trajectory import StepType
 
 class PGMSlacAgent(object):
     def __init__(
@@ -36,6 +38,7 @@ class PGMSlacAgent(object):
         self._gamma = gamma
         self._tau = tau
         self._action_stickyness=action_stickyness
+        self._sequence_length = sequence_length
 
         self._model_network = ModelNetwork(
                 observation_space,
@@ -83,7 +86,7 @@ class PGMSlacAgent(object):
     def train(self, experience):
         self._training_iterations += 1
 
-        model_loss, model_artifacts = self._model.compute_loss(experience)
+        model_loss, model_artifacts = self._model_network.compute_loss(experience)
 
         z1_samples = torch.stack(model_artifacts['z1_posterior_samples'], axis=1)
         z2_samples = torch.stack(model_artifacts['z2_posterior_samples'], axis=1)
@@ -156,3 +159,10 @@ class PGMSlacAgent(object):
             next_actions = next_actions_dist.sample()
             log_pis = next_actions_dist.log_prob(next_actions)
         return (self._log_ent * (-log_pis - self._target_ent)).mean()
+
+    def clear_context(self):
+        img_ctx = np.zeros([self._sequence_length + 1] + list(self._observation_space.shape))
+        action_ctx = np.zeros([self._sequence_length] + list(self._action_space.shape))
+        reward_ctx = np.zeros(self._sequence_length)
+        step_types = [StepType.first for _ in range(self._sequence_length)]
+        return img_ctx, action_ctx, reward_ctx, step_types

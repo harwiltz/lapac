@@ -34,3 +34,14 @@ class MultivariateNormalDiag(nn.Module):
                     loc=loc,
                     covariance_matrix=torch.diag_embed(scale))
 #                    self._latent_size)
+
+class FixedIsotropicNormal(nn.Module):
+    def __init__(self, latent_size, loc=0, scale=1):
+        super(FixedIsotropicNormal, self).__init__()
+        self._loc = loc
+        self._scale = scale
+        self._latent_size = latent_size
+
+    def forward(self, data):
+        loc = self._loc * torch.ones((*data.shape[:-2], self._latent_size))
+        return dbt.normal.Normal(loc=loc, scale=self._scale)
