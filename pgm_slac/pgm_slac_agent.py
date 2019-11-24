@@ -2,6 +2,7 @@ import copy
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from pgm_slac.actor_network import ActorNetwork
 from pgm_slac.critic_network import CriticNetwork
@@ -52,7 +53,7 @@ class PGMSlacAgent(object):
                 sequence_length,
                 base_depth=actor_base_depth)
         self._critic_network = CriticNetwork(
-                feature_size,
+                z1_size + z2_size,
                 action_space,
                 base_depth=critic_base_depth)
         self._target_critic_network = copy.deepcopy(self._critic_network)
@@ -88,32 +89,32 @@ class PGMSlacAgent(object):
 
         model_loss, model_artifacts = self._model_network.compute_loss(experience)
 
-        z1_samples = torch.stack(model_artifacts['z1_posterior_samples'], axis=1)
-        z2_samples = torch.stack(model_artifacts['z2_posterior_samples'], axis=1)
+        z1_samples = model_artifacts['z1_posterior_samples']
+        z2_samples = model_artifacts['z2_posterior_samples']
         latent_posterior_samples = torch.cat([z1_samples, z2_samples], axis=-1)
 
         images, actions, rewards, step_types = experience
-        features = torch.stack(model_artifacts['features'], axis=1)
+        features = model_artifacts['features']
 
-        actor_loss = self._compute_actor_loss(features, actions, latent_posterior_samples)
-        critic_loss = self._compute_critic_loss(
+        actor_loss = self.compute_actor_loss(features, actions, latent_posterior_samples)
+        critic_loss = self.compute_critic_loss(
                 features,
                 actions,
                 latent_posterior_samples,
                 rewards)
 
-        ent_loss = self._compute_ent_loss(features, actions)
+        ent_loss = self.compute_ent_loss(features, actions)
 
         self._model_optimizer.zero_grad()
-        model_loss.backward()
+        model_loss.backward(retain_graph=True)
         self._model_optimizer.step()
 
         self._actor_optimizer.zero_grad()
-        actor_loss.backward()
+        actor_loss.backward(retain_graph=True)
         self._actor_optimizer.step()
 
         self._critic_optimizer.zero_grad()
-        critic_loss.backward()
+        critic_loss.backward(retain_graph=True)
         self._critic_optimizer.step()
 
         self._ent_optimizer.zero_grad()
@@ -121,41 +122,41 @@ class PGMSlacAgent(object):
         self._ent_optimizer.step()
 
         critic_params = self._critic_network.parameters()
-        target_critic_params = self._target_critic_network_parameters()
+        target_critic_params = self._target_critic_network.parameters()
         for params, target_params in zip(critic_params, target_critic_params):
             target_params.data.copy_(self._tau * params.data + (1-self._tau) * target_params.data)
 
     def compute_actor_loss(self, features, actions, latent_posterior_samples):
         # actions shape: (Batch, Time, Action)
-        leading_actions = actions[:, :-1]
-        policy_dist = self._actor_network(features, leading_actions)
+        policy_dist = self._actor_network(features, actions)
         next_actions = policy_dist.sample()
-        q_values = torch.min(self._critic_network(latent_posterior_samples[:, -1], next_actions))
+        q_values = torch.min(*self._critic_network(latent_posterior_samples[:, -1], next_actions))
         log_pis = policy_dist.log_prob(next_actions)
-        return torch.exp(self._log_ent) * log_pis - q_values
+        loss = torch.exp(self._log_ent) * log_pis - q_values.squeeze()
+        return loss.mean()
 
     def compute_critic_loss(self, features, actions, latent_posterior_samples, rewards):
         # Q(z_t, a_t)
         estimated_q_values_1, estimated_q_values_2 = self._critic_network(
                 latent_posterior_samples[:, -2],
                 actions[:, -2])
-        leading_actions = actions[:, :-1]
-        ent = tf.exp(self._log_ent)
+        ent = torch.exp(self._log_ent)
         with torch.no_grad():
-            next_actions_dist = self._actor_network(features, leading_actions)
+            next_actions_dist = self._actor_network(features, actions)
             next_actions = next_actions_dist.sample()
             log_pis = next_actions_dist.log_prob(next_actions)
             target_q_values = torch.min(
-                self._target_critic_network(latent_posterior_samples[:, :-1], next_actions))
-            target_q_values = rewards[:, -2] + self._gamma * (target_q_values - ent * log_pis)
-        q_loss_1 = F.mse_loss(estimated_q_values_1, target_q_values)
-        q_loss_2 = F.mse_loss(estimated_q_values_2, target_q_values)
+                *self._target_critic_network(latent_posterior_samples[:, -2], next_actions)
+            ).squeeze()
+            q_next = self._gamma * (target_q_values - ent * log_pis)
+            target_q_values = rewards[:, -1] + q_next
+        q_loss_1 = F.mse_loss(estimated_q_values_1.squeeze(), target_q_values)
+        q_loss_2 = F.mse_loss(estimated_q_values_2.squeeze(), target_q_values)
         return q_loss_1 + q_loss_2
 
     def compute_ent_loss(self, features, actions):
-        leading_actions = actions[:, :-1]
         with torch.no_grad():
-            next_actions_dist = self._actor_network(features, leading_actions)
+            next_actions_dist = self._actor_network(features, actions)
             next_actions = next_actions_dist.sample()
             log_pis = next_actions_dist.log_prob(next_actions)
         return (self._log_ent * (-log_pis - self._target_ent)).mean()

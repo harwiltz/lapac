@@ -4,7 +4,7 @@ import torch
 class SequenceReplayBuffer(object):
     def __init__(self, capacity, sequence_length, image_shape, action_shape):
         self._pointer = 0
-        self._image_buf = np.zeros(shape=(capacity, sequence_length, *image_shape))
+        self._image_buf = np.zeros(shape=(capacity, (sequence_length + 1), *image_shape))
         self._action_buf = np.zeros(shape=(capacity, sequence_length, *action_shape))
         self._rew_buf = np.zeros(shape=(capacity, sequence_length))
         self._step_type_buf = np.zeros(shape=(capacity, sequence_length))

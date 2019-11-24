@@ -4,11 +4,20 @@ import torch.nn.functional as F
 import torch.distributions as dbt
 
 class MultivariateNormalDiag(nn.Module):
-    def __init__(self, in_width, base_depth, latent_size, scale=None):
+    def __init__(
+            self,
+            in_width,
+            base_depth,
+            latent_size,
+            scale=None,
+            min_scale=1e-2,
+            max_scale=20):
         super(MultivariateNormalDiag, self).__init__()
         self._latent_size = latent_size
         self._base_depth = base_depth
         self._scale = scale
+        self._min_scale = min_scale
+        self._max_scale = max_scale
         self._dense1 = nn.Linear(in_width, base_depth)
         self._dense2 = nn.Linear(base_depth, base_depth)
         if scale is None:
@@ -25,15 +34,13 @@ class MultivariateNormalDiag(nn.Module):
         out = self._out_layer(out)
         if self._scale is None:
             loc, logscale = torch.chunk(out, 2, dim=-1)
-            scale = F.softplus(logscale)
+            scale = torch.clamp(F.softplus(logscale), self._min_scale, self._max_scale)
         else:
             loc = out
             scale = self._scale
-#        return dbt.Independent(
         return dbt.multivariate_normal.MultivariateNormal(
                     loc=loc,
                     covariance_matrix=torch.diag_embed(scale))
-#                    self._latent_size)
 
 class FixedIsotropicNormal(nn.Module):
     def __init__(self, latent_size, loc=0, scale=1):
@@ -44,4 +51,6 @@ class FixedIsotropicNormal(nn.Module):
 
     def forward(self, data):
         loc = self._loc * torch.ones((*data.shape[:-2], self._latent_size))
-        return dbt.normal.Normal(loc=loc, scale=self._scale)
+        scale = self._scale * torch.ones((*data.shape[:-2], self._latent_size))
+        cov = torch.diag_embed(scale)
+        return dbt.multivariate_normal.MultivariateNormal(loc=loc, covariance_matrix=cov)

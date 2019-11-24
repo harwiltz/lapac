@@ -162,11 +162,11 @@ class ModelNetwork(nn.Module):
         reward_input = torch.cat([
             z1_samples[:,:-1],
             z2_samples[:,:-1],
-            actions[:,:-1],
+            actions[:,:],
             z1_samples[:,1:],
             z2_samples[:,1:]], axis=-1)
         reward_dist = self._reward_model(reward_input)
-        reward_logprobs = reward_dist.log_prob(rewards)
+        reward_logprobs = reward_dist.log_prob(rewards.unsqueeze(dim=-1))
         reward_loss = -reward_logprobs.mean()
 
         loss = reconstruction_loss + kl + reward_loss
@@ -193,7 +193,7 @@ class ModelNetwork(nn.Module):
         features = features.permute(1,0,2)
         actions = actions.permute(1,0,2)
 
-        sequence_length = actions.shape[0] - 1
+        sequence_length = actions.shape[0]
         first_z1_dist = self._z1_first_posterior(features[0])
         first_z1_sample = first_z1_dist.sample()
         first_z2_dist = self._z2_first_posterior(first_z1_sample)
@@ -226,7 +226,7 @@ class ModelNetwork(nn.Module):
         z1_dists.append(first_z1_dist)
         # Swap batch and time axes
         actions = actions.permute(1,0,2)
-        sequence_length = actions.shape[0] - 1
+        sequence_length = actions.shape[0]
         for t in range(1, sequence_length + 1):
             z1_input = torch.cat([z2_samples[t-1], actions[t-1]], axis=-1)
             z1_dist = self._z1_prior(z1_input)

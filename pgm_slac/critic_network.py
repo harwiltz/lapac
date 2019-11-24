@@ -17,7 +17,7 @@ class CriticNetwork(nn.Module):
         self._l_2_2 = nn.Linear(base_depth, base_depth)
         self._l_2_3 = nn.Linear(base_depth, 1)
 
-    def call(self, features, action):
+    def forward(self, features, action):
         critic_input = torch.cat([features, action], axis=-1)
 
         q1 = self._l_1_1(critic_input)
