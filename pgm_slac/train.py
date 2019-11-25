@@ -31,14 +31,19 @@ def train(
         max_timesteps=100000,
         max_episode_length=500,
         steps_per_epoch=10000,
-        batch_size=32):
-
-    experiment_dir = os.path.join(log_dir, experiment_name)
-    writer = SummaryWriter(experiment_dir)
+        batch_size=32,
+        dryrun=False):
 
     env, obs_space, action_space = load_environment(env_universe, env_name)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("Device: {}".format(device))
+
+    if dryrun:
+        return
+
+    experiment_dir = os.path.join(log_dir, experiment_name)
+    writer = SummaryWriter(experiment_dir)
 
     replay = SequenceReplayBuffer(
             replay_buffer_capacity,
@@ -130,7 +135,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train pgm-slac agent')
     parser.add_argument('--log_dir', type=str, default='logs')
     parser.add_argument('--experiment_name', type=str, default='pgm-slac')
+    parser.add_argument(
+            '--dryrun',
+            action='store_true')
     args = parser.parse_args()
     virtual_display = Display(visible=0, size=(1400,900))
     virtual_display.start()
-    train(args.log_dir, args.experiment_name)
+    train(args.log_dir, args.experiment_name, dryrun=args.dryrun)
