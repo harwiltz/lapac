@@ -56,7 +56,7 @@ def train(
             ent_lr=ent_lr,
             model_lr=model_lr)
 
-    img = env.reset()
+    img = env.reset() / 255.0
     img_ctx, action_ctx, reward_ctx, step_types = agent.clear_context()
     step_type = StepType.first
 
@@ -73,6 +73,7 @@ def train(
         else:
             action = agent.action((img_ctx, action_ctx, step_types)).numpy()
         img, rew, done, info = env.step(action)
+        img = img / 255.0
         episode_reward += rew
         action_ctx = np.concatenate([action_ctx[1:], np.expand_dims(action, 0)])
         reward_ctx = np.concatenate([reward_ctx[1:], np.array([rew])])

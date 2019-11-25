@@ -73,6 +73,7 @@ class Decoder(nn.Module):
         # (Batch, Channel, H, W) --> (Batch, H, W, Channel)
         out = out.permute(0, 2, 3, 1)
         out = out.reshape(latents.shape[:-1] + out.shape[-3:])
+        out = out.sigmoid()
         return dtb.Independent(dtb.normal.Normal(loc=out, scale=self._scale), 3)
 
 class ModelNetwork(nn.Module):

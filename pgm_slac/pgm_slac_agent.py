@@ -29,6 +29,8 @@ class PGMSlacAgent(object):
             ent_lr=3e-4,
             action_stickyness=2):
 
+        self._device = "cuda" if torch.cuda.is_available() else "cpu"
+
         self._training_iterations = 0
         self._decisions_made = 0
         self._last_action = None
@@ -46,17 +48,17 @@ class PGMSlacAgent(object):
                 action_space,
                 feature_size=feature_size,
                 z1_size=z1_size,
-                z2_size=z2_size)
+                z2_size=z2_size).to(self._device)
         self._actor_network = ActorNetwork(
                 feature_size,
                 action_space,
                 sequence_length,
-                base_depth=actor_base_depth)
+                base_depth=actor_base_depth).to(self._device)
         self._critic_network = CriticNetwork(
                 z1_size + z2_size,
                 action_space,
-                base_depth=critic_base_depth)
-        self._target_critic_network = copy.deepcopy(self._critic_network)
+                base_depth=critic_base_depth).to(self._device)
+        self._target_critic_network = copy.deepcopy(self._critic_network).to(self._device)
 
         # Weight of entropy for MaxEnt RL
         # Train it like SAC and SLAC
@@ -67,8 +69,6 @@ class PGMSlacAgent(object):
         self._critic_optimizer = torch.optim.Adam(self._critic_network.parameters(), lr=critic_lr)
         self._actor_optimizer = torch.optim.Adam(self._actor_network.parameters(), lr=actor_lr)
         self._ent_optimizer = torch.optim.Adam([self._log_ent], lr=ent_lr)
-
-        self._device = "cuda" if torch.cuda.is_available() else "cpu"
 
     def action(self, context):
         images, actions, step_types = context
