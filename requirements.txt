@@ -5,3 +5,4 @@ gym
 gym[box2d]
 numpy
 matplotlib
+pyvirtualdisplay

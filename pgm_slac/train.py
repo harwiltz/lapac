@@ -5,6 +5,7 @@ import os
 import torch
 import torchvision
 
+from pyvirtualdisplay import Display
 from torch.utils.tensorboard import SummaryWriter
 
 from pgm_slac.environments import custom_environments
@@ -130,4 +131,6 @@ if __name__ == "__main__":
     parser.add_argument('--log_dir', type=str, default='logs')
     parser.add_argument('--experiment_name', type=str, default='pgm-slac')
     args = parser.parse_args()
+    virtual_display = Display(visible=0, size=(1400,900))
+    virtual_display.start()
     train(args.log_dir, args.experiment_name)
