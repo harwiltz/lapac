@@ -138,6 +138,7 @@ class PGMSlacAgent(object):
             'ent': torch.exp(self._log_ent),
             'images': model_artifacts['images'],
             'posterior_images': model_artifacts['posterior_images'],
+            'reward_loss': model_artifacts['reward_loss'],
         }
 
     def compute_actor_loss(self, features, actions, latent_posterior_samples):
@@ -181,3 +182,10 @@ class PGMSlacAgent(object):
         reward_ctx = np.zeros(self._sequence_length)
         step_types = [StepType.first for _ in range(self._sequence_length)]
         return img_ctx, action_ctx, reward_ctx, step_types
+
+    @property
+    def actor_network_input_shape(self):
+        obs_size = self._feature_size
+        act_size = self._action_space.shape[0]
+        size = self._sequence_length * (obs_size + act_size) + obs_size
+        return (size,)

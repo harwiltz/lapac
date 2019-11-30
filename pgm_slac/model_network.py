@@ -135,30 +135,38 @@ class ModelNetwork(nn.Module):
                 self._z1_size)
         self._z2_posterior = self._z2_prior
 
-    def compute_loss(self, experience):
+    def forward(self, *experience):
         images, actions, rewards, step_types = experience
         features = self.feature_extractor(images)
 
         z1_posterior_samples, z1_posterior_dists, z2_posterior_samples, z2_posterior_dists = \
             self.posterior_samples_and_dists(features, actions, step_types)
 
-        z1_prior_dists = self.z1_prior_dists_given_samples(
-                z1_posterior_samples,
-                z2_posterior_samples,
-                actions,
-                step_types)
+        z1_samples = torch.stack(z1_posterior_samples, axis=1)
+        z2_samples = torch.stack(z2_posterior_samples, axis=1)
+
+        return z1_samples, z2_samples
+
+    def compute_loss(self, experience):
+        images, actions, rewards, step_types = experience
+
+        features = self.feature_extractor(images)
+
+        z1_posterior_samples, z1_posterior_dists, z2_posterior_samples, z2_posterior_dists = \
+            self.posterior_samples_and_dists(features, actions, step_types)
 
         z1_samples = torch.stack(z1_posterior_samples, axis=1)
         z2_samples = torch.stack(z2_posterior_samples, axis=1)
+
         z_samples = torch.cat([z1_samples, z2_samples], axis=-1)
 
-        reconstruction_dist = self.decoder(z_samples)
-        reconstruction_logprobs = reconstruction_dist.log_prob(images).sum(dim=-1)
-        reconstruction_loss = -reconstruction_logprobs.mean()
+        z1_prior_dists = self.z1_prior_dists_given_samples(
+                z1_samples,
+                z2_samples,
+                actions,
+                step_types)
 
-        kl = torch.FloatTensor([0])
-        for (p, q) in zip(z1_prior_dists, z1_posterior_dists):
-            kl += dtb.kl.kl_divergence(q, p).mean()
+        reconstruction_dist = self.decoder(z_samples)
 
         reward_input = torch.cat([
             z1_samples[:,:-1],
@@ -167,6 +175,14 @@ class ModelNetwork(nn.Module):
             z1_samples[:,1:],
             z2_samples[:,1:]], axis=-1)
         reward_dist = self._reward_model(reward_input)
+
+        reconstruction_logprobs = reconstruction_dist.log_prob(images).sum(dim=-1)
+        reconstruction_loss = -reconstruction_logprobs.mean()
+
+        kl = torch.FloatTensor([0])
+        for (p, q) in zip(z1_prior_dists, z1_posterior_dists):
+            kl += dtb.kl.kl_divergence(q, p).mean()
+
         reward_logprobs = reward_dist.log_prob(rewards.unsqueeze(dim=-1))
         reward_loss = -reward_logprobs.mean()
 
@@ -178,6 +194,7 @@ class ModelNetwork(nn.Module):
             'images': images,
             'features': features,
             'posterior_images': reconstruction_dist.mean,
+            'reward_loss': reward_loss,
         }
 
         return loss, artifacts
@@ -228,6 +245,8 @@ class ModelNetwork(nn.Module):
         z1_dists.append(first_z1_dist)
         # Swap batch and time axes
         actions = actions.permute(1,0,2)
+        z1_samples = z1_samples.permute(1,0,2)
+        z2_samples = z2_samples.permute(1,0,2)
         sequence_length = actions.shape[0]
         for t in range(1, sequence_length + 1):
             z1_input = torch.cat([z2_samples[t-1], actions[t-1]], axis=-1)

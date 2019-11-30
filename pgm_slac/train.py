@@ -62,6 +62,8 @@ def train(
             ent_lr=ent_lr,
             model_lr=model_lr)
 
+    add_graph_summaries(writer, agent)
+
     img = env.reset() / 255.0
     img_ctx, action_ctx, reward_ctx, step_types = agent.clear_context()
     step_type = StepType.first
@@ -107,6 +109,7 @@ def train(
 
 def update_summaries(writer, artifacts, t, image_freq=50):
     writer.add_scalar('Model/Model Loss', artifacts['model_loss'], t)
+    writer.add_scalar('Model/Reward Loss', artifacts['reward_loss'],t)
     writer.add_scalar('Actor/Actor Loss', artifacts['actor_loss'], t)
     writer.add_scalar('Actor/Log Policy', artifacts['actor_log_pi'], t)
     writer.add_scalar('Critic/Critic Loss', artifacts['critic_loss'], t)
@@ -117,6 +120,13 @@ def update_summaries(writer, artifacts, t, image_freq=50):
     if t % image_freq == 0:
         writer.add_image('Ground Truth', create_image_chain(artifacts['images']))
         writer.add_image('Posterior Images', create_image_chain(artifacts['posterior_images']))
+
+def add_graph_summaries(writer, agent):
+    image_input = torch.rand((2, 5, 81,81,3))
+    action_input = torch.rand((2, 4,3))
+    reward_input = torch.rand((2, 4,))
+    st_input = torch.rand((2, 4,))
+    writer.add_graph(agent._model_network, (image_input, action_input, reward_input, st_input))
 
 def create_image_chain(images, chain_length=4):
     # images shape: (Batch, W, H, 3)
