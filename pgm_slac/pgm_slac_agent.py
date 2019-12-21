@@ -141,6 +141,83 @@ class PGMSlacAgent(object):
             'reward_loss': model_artifacts['reward_loss'],
         }
 
+    def plan(self, num_sequences=1):
+        feature_batch = []
+        latent_batch = []
+        rew_batch = []
+        action_batch = []
+        for _ in range(num_sequences):
+            z1_samples = []
+            z2_samples = []
+            features = [] # Needed only for policy sampling/learning
+            img_ctx, action_ctx, rew_ctx, step_types = self.clear_context()
+            z1 = self._model_network._z1_first_prior(action_ctx).sample()
+            z2 = self._model_network._z2_first_prior(z1).sample()
+            obs = self._model_network.decoder(torch.cat([z1, z2])).sample()
+            for t in range(self._sequence_length):
+                z1_samples.append(z1)
+                z2_samples.append(z2)
+                img_ctx = np.concatenate([img_ctx[1:], np.expand_dims(obs.numpy(), 0)])
+                action = self.action((img_ctx, action_ctx, step_types))
+                step_types = step_types[1:] + [StepType.mid]
+                action_ctx = np.concatenate([action_ctx[1:], np.expand_dims(action.numpy(), 0)])
+                feats = self._model_network.feature_extractor(obs)
+                features.append(feats)
+                z1_input = torch.cat([
+                    z2,
+                    action
+                ])
+                next_z1 = self._model_network._z1_prior(z1_input).sample()
+                z2_input = torch.cat([
+                    next_z1,
+                    z2,
+                    action
+                ])
+                next_z2 = self._model_network._z2_prior(z2_input).sample()
+                rew_input = torch.cat([
+                    torch.cat([z1, z2]),
+                    action,
+                    torch.cat([next_z1, next_z2])
+                ])
+                rew = self._model_network._reward_model(rew_input).sample().numpy()
+                rew_ctx = np.append(rew_ctx[1:], rew)
+                z1 = next_z1
+                z2 = next_z2
+                obs = self._model_network.decoder(torch.cat([z1, z2])).sample()
+            z1_samples.append(z1)
+            z2_samples.append(z2)
+            features.append(self._model_network.feature_extractor(obs))
+            z1_samples = torch.stack(z1_samples)
+            z2_samples = torch.stack(z2_samples)
+            latent_samples = torch.cat([z1_samples, z2_samples], axis=1)
+            features = torch.stack(features)
+            feature_batch.append(features)
+            latent_batch.append(latent_samples)
+            action_batch.append(action_ctx)
+            rew_batch.append(rew_ctx)
+
+        feature_batch = torch.stack(feature_batch)
+        latent_batch = torch.stack(latent_batch)
+        rew_batch = torch.FloatTensor(rew_batch).to(self._device)
+        action_batch = torch.FloatTensor(action_batch).to(self._device)
+
+        actor_loss, _ = self.compute_actor_loss(feature_batch, action_batch, latent_batch)
+        critic_loss, _ = \
+            self.compute_critic_loss(feature_batch, action_batch, latent_batch, rew_batch)
+
+        self._actor_optimizer.zero_grad()
+        actor_loss.backward(retain_graph=True)
+        self._actor_optimizer.step()
+
+        self._critic_optimizer.zero_grad()
+        critic_loss.backward(retain_graph=True)
+        self._critic_optimizer.step()
+
+        return {
+            'planning_actor_loss': actor_loss,
+            'planning_critic_loss': critic_loss,
+        }
+
     def compute_actor_loss(self, features, actions, latent_posterior_samples):
         # actions shape: (Batch, Time, Action)
         policy_dist = self._actor_network(features, actions)

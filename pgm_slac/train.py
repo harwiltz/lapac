@@ -31,6 +31,9 @@ def train(
         max_timesteps=100000,
         max_episode_length=500,
         steps_per_epoch=10000,
+        planning=True,
+        planning_interval=1,
+        planning_sequences=4,
         batch_size=32,
         dryrun=False):
 
@@ -99,15 +102,20 @@ def train(
             cur_episode_length = 0
         if t > initial_collect_time:
             experience = replay.sample(batch_size)
+            if planning and (t % planning_interval == 0):
+                planning_artifacts = agent.plan(planning_sequences)
+            else:
+                planning_artifacts = {}
             artifacts = agent.train(experience)
             artifacts.update({
                 'done': done,
                 'episode_length': last_episode_length,
                 'episode_reward': last_episode_reward,
             })
-            update_summaries(writer, artifacts, t)
+            artifacts.update(planning_artifacts)
+            update_summaries(writer, artifacts, t, planning_interval=planning_interval)
 
-def update_summaries(writer, artifacts, t, image_freq=50):
+def update_summaries(writer, artifacts, t, image_freq=50, planning_interval=1):
     writer.add_scalar('Model/Model Loss', artifacts['model_loss'], t)
     writer.add_scalar('Model/Reward Loss', artifacts['reward_loss'],t)
     writer.add_scalar('Actor/Actor Loss', artifacts['actor_loss'], t)
@@ -120,6 +128,11 @@ def update_summaries(writer, artifacts, t, image_freq=50):
     if t % image_freq == 0:
         writer.add_image('Ground Truth', create_image_chain(artifacts['images']))
         writer.add_image('Posterior Images', create_image_chain(artifacts['posterior_images']))
+    if 'planning_actor_loss' in artifacts.keys():
+        writer.add_scalar('Planning/Actor Loss', artifacts['planning_actor_loss'],
+                          int(t / planning_interval))
+        writer.add_scalar('Planning/Critic Loss', artifacts['planning_critic_loss'],
+                          int(t / planning_interval))
 
 def add_graph_summaries(writer, agent):
     image_input = torch.rand((2, 5, 81,81,3))
@@ -145,10 +158,29 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train pgm-slac agent')
     parser.add_argument('--log_dir', type=str, default='logs')
     parser.add_argument('--experiment_name', type=str, default='pgm-slac')
+    parser.add_argument('--no_planning', action='store_true')
+    parser.add_argument('--sequence_length', type=int, default=4)
+    parser.add_argument('--feature_size', type=int, default=256)
+    parser.add_argument('--gamma', type=float, default=0.99)
+    parser.add_argument('--tau', type=float, default=0.005)
+    parser.add_argument('--initial_collect_time', type=int, default=100)
+    parser.add_argument('--replay_buffer_capacity', type=int, default=10000)
+    parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument(
             '--dryrun',
             action='store_true')
     args = parser.parse_args()
     virtual_display = Display(visible=0, size=(1400,900))
     virtual_display.start()
-    train(args.log_dir, args.experiment_name, dryrun=args.dryrun)
+    train(
+        args.log_dir,
+        args.experiment_name,
+        dryrun=args.dryrun,
+        planning=not args.no_planning,
+        gamma=args.gamma,
+        tau=args.tau,
+        feature_size=args.feature_size,
+        initial_collect_time=args.initial_collect_time,
+        replay_buffer_capacity=args.replay_buffer_capacity,
+        batch_size=args.batch_size,
+        sequence_length=args.sequence_length)
