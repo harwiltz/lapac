@@ -8,10 +8,10 @@ import torchvision
 from pyvirtualdisplay import Display
 from torch.utils.tensorboard import SummaryWriter
 
-from pgm_slac.environments import custom_environments
-from pgm_slac.pgm_slac_agent import PGMSlacAgent
-from pgm_slac.replay import SequenceReplayBuffer
-from pgm_slac.trajectory import StepType
+from lapac.environments import custom_environments
+from lapac.lapac_agent import LapacAgent
+from lapac.replay import SequenceReplayBuffer
+from lapac.trajectory import StepType
 
 def train(
         log_dir,
@@ -54,7 +54,7 @@ def train(
             obs_space.shape,
             action_space.shape)
 
-    agent = PGMSlacAgent(
+    agent = LapacAgent(
             obs_space,
             action_space,
             sequence_length=sequence_length,
@@ -155,9 +155,9 @@ def load_environment(env_universe, env_name):
         return env, env.observation_space, env.action_space
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Train pgm-slac agent')
+    parser = argparse.ArgumentParser(description='Train LAPAC agent')
     parser.add_argument('--log_dir', type=str, default='logs')
-    parser.add_argument('--experiment_name', type=str, default='pgm-slac')
+    parser.add_argument('--experiment_name', type=str, default='lapac')
     parser.add_argument('--no_planning', action='store_true')
     parser.add_argument('--sequence_length', type=int, default=4)
     parser.add_argument('--feature_size', type=int, default=256)

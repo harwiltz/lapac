@@ -4,12 +4,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from pgm_slac.actor_network import ActorNetwork
-from pgm_slac.critic_network import CriticNetwork
-from pgm_slac.model_network import ModelNetwork
-from pgm_slac.trajectory import StepType
+from lapac.actor_network import ActorNetwork
+from lapac.critic_network import CriticNetwork
+from lapac.model_network import ModelNetwork
+from lapac.trajectory import StepType
 
-class PGMSlacAgent(object):
+class LapacAgent(object):
     def __init__(
             self,
             observation_space,

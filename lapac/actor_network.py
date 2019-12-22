@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.distributions as dtb
 
-from pgm_slac.utils import MultivariateNormalDiag
+from lapac.utils import MultivariateNormalDiag
 
 class ActorNetwork(nn.Module):
     def __init__(

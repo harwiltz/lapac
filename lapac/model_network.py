@@ -4,8 +4,8 @@ import torch.nn.functional as F
 
 import torch.distributions as dtb
 
-from pgm_slac.utils import MultivariateNormalDiag
-from pgm_slac.utils import FixedIsotropicNormal
+from lapac.utils import MultivariateNormalDiag
+from lapac.utils import FixedIsotropicNormal
 
 class FeatureExtractor(nn.Module):
     def __init__(
