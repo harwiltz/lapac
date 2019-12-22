@@ -10,3 +10,6 @@ particularly for partially-observable environments. It uses a fully stochastic
 latent variable model inspired by [SLAC](https://github.com/alexlee-gk/slac),
 and uses the generative latent dynamics model to train the actor and critic
 offline.
+
+The project report can be viewed at [this
+link](https://cs.mcgill.ca/~hwiltz/literature/lapac.pdf).
